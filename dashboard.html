@@ -422,6 +422,123 @@
   .json-bool { color: #7c3aed; }
   .json-null { color: var(--muted); }
 
+  /* Negotiation Trace */
+  .neg-log-item {
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    margin-bottom: 20px;
+    overflow: hidden;
+  }
+  .neg-log-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 20px;
+    background: var(--bg);
+    cursor: pointer;
+    user-select: none;
+  }
+  .neg-log-header:hover { background: #eef2f7; }
+  .neg-log-meta {
+    font-family: var(--mono);
+    font-size: 13px;
+    color: var(--muted);
+  }
+  .neg-log-meta strong { color: var(--text); font-size: 14px; }
+  .neg-badge-ok {
+    font-family: var(--mono);
+    font-size: 12px;
+    font-weight: 600;
+    padding: 5px 12px;
+    border-radius: 20px;
+    background: rgba(5,150,105,0.12);
+    color: var(--green);
+    border: 1px solid rgba(5,150,105,0.3);
+  }
+  .neg-badge-fail {
+    font-family: var(--mono);
+    font-size: 12px;
+    font-weight: 600;
+    padding: 5px 12px;
+    border-radius: 20px;
+    background: rgba(220,38,38,0.10);
+    color: var(--red);
+    border: 1px solid rgba(220,38,38,0.25);
+  }
+  .neg-trace {
+    padding: 0 20px 20px;
+    display: none;
+  }
+  .neg-trace.open { display: block; }
+  .trace-step {
+    display: flex;
+    align-items: flex-start;
+    gap: 14px;
+    padding: 14px 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .trace-step:last-child { border-bottom: none; }
+  .trace-icon {
+    width: 28px; height: 28px;
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 13px;
+    font-weight: 700;
+    flex-shrink: 0;
+    margin-top: 2px;
+  }
+  .trace-icon.ok   { background: rgba(5,150,105,0.12); color: var(--green); border: 1.5px solid rgba(5,150,105,0.3); }
+  .trace-icon.fail { background: rgba(220,38,38,0.10); color: var(--red);   border: 1.5px solid rgba(220,38,38,0.25); }
+  .trace-body { flex: 1; }
+  .trace-name {
+    font-family: var(--mono);
+    font-size: 14px;
+    font-weight: 600;
+    margin-bottom: 4px;
+  }
+  .trace-name.ok   { color: var(--green); }
+  .trace-name.fail { color: var(--red); }
+  .trace-detail {
+    font-family: var(--mono);
+    font-size: 13px;
+    color: var(--muted);
+    line-height: 1.6;
+  }
+  .trace-detail .hi { color: var(--accent); font-weight: 500; }
+  .trace-detail .hi-fail { color: var(--red); font-weight: 500; }
+  .neg-log-empty {
+    text-align: center;
+    padding: 64px;
+    font-family: var(--mono);
+    font-size: 14px;
+    color: var(--muted);
+  }
+  .neg-log-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 24px;
+  }
+  .btn-sm {
+    font-family: var(--mono);
+    font-size: 13px;
+    padding: 8px 18px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text);
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .btn-sm:hover { border-color: var(--accent); color: var(--accent); }
+  /* inline trace panel inside cycle page */
+  .inline-trace {
+    margin-top: 16px;
+    border-top: 1px solid var(--border);
+    padding-top: 16px;
+    display: none;
+  }
+  .inline-trace.open { display: block; }
   /* Scrollbar */
   ::-webkit-scrollbar { width: 8px; height: 8px; }
   ::-webkit-scrollbar-track { background: transparent; }
@@ -599,6 +716,34 @@
           <div class="step-status" id="ps-transfer-s">Waiting</div>
         </div>
       </div>
+    </div>
+
+    <div id="cycle-neg-trace-card" class="card" style="display:none">
+      <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:20px;">
+        <div class="card-title" style="margin-bottom:0">Negotiation — Policy Check</div>
+        <span id="neg-overall-badge"></span>
+      </div>
+      <!-- country 비교 시각화 -->
+      <div id="neg-country-compare" style="display:none; margin-bottom:24px;">
+        <div style="display:flex; align-items:center; gap:0; background:var(--bg); border:1px solid var(--border); border-radius:10px; overflow:hidden;">
+          <div style="flex:1; padding:20px 24px; border-right:1px solid var(--border);">
+            <div style="font-family:var(--mono); font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:.06em; margin-bottom:8px;">Consumer (요청자)</div>
+            <div id="neg-consumer-id"   style="font-family:var(--mono); font-size:12px; color:var(--muted); margin-bottom:6px;"></div>
+            <div id="neg-consumer-country" style="font-family:var(--mono); font-size:28px; font-weight:700; letter-spacing:.08em;"></div>
+          </div>
+          <div style="width:60px; text-align:center; flex-shrink:0;">
+            <div id="neg-match-icon" style="font-size:22px;"></div>
+          </div>
+          <div style="flex:1; padding:20px 24px; border-left:1px solid var(--border);">
+            <div style="font-family:var(--mono); font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:.06em; margin-bottom:8px;">Policy (정책 요구)</div>
+            <div id="neg-offering-name" style="font-family:var(--mono); font-size:12px; color:var(--muted); margin-bottom:6px;"></div>
+            <div id="neg-policy-country" style="font-family:var(--mono); font-size:28px; font-weight:700; letter-spacing:.08em;"></div>
+          </div>
+        </div>
+        <div id="neg-verdict" style="margin-top:12px; padding:12px 18px; border-radius:8px; font-family:var(--mono); font-size:13px; font-weight:600;"></div>
+      </div>
+      <!-- 단계별 trace -->
+      <div id="cycle-neg-trace-body"></div>
     </div>
 
     <div id="cycle-result-card" class="card" style="display:none">
@@ -828,19 +973,24 @@ async function queryCatalog() {
       <div class="card">
         <div class="card-title">Results - ${data.participant}</div>
         ${offerings.length === 0
-          ? '<div class="empty-state">No service offerings match the usage policy conditions</div>'
-          : offerings.map(o => `
+          ? '<div class="empty-state">No service offerings available</div>'
+          : offerings.map(o => {
+              const policyCountry = o.usage_policy.country;
+              const accessible = !policyCountry || policyCountry === vc.country;
+              return `
               <div class="offer-card">
                 <div>
                   <div class="offer-name">${o.name}</div>
                   <div class="offer-id">service_offering_id: ${o.service_offering_id.substring(0,16)}...</div>
                 </div>
                 <div style="display:flex;gap:12px;align-items:center">
-                  <span class="policy-tag">country: ${o.usage_policy.country}</span>
-                  <span class="badge badge-green">ACCESSIBLE</span>
+                  <span class="policy-tag">country: ${policyCountry || 'any'}</span>
+                  ${accessible
+                    ? '<span class="badge badge-green">ACCESSIBLE</span>'
+                    : '<span class="badge" style="background:rgba(220,38,38,0.08);color:var(--red);border:1px solid rgba(220,38,38,0.2)">POLICY RESTRICTED</span>'
+                  }
                 </div>
-              </div>
-            `).join('')
+              </div>`; }).join('')
         }
         <div style="margin-top:16px;font-family:var(--mono);font-size:13px;color:var(--muted)">
           ${offerings.length} service offering(s) found | VC country: ${vc.country}
@@ -871,6 +1021,8 @@ async function runCycle() {
   ['catalog','negotiate','transfer'].forEach(s => setStep(s, '', 'Waiting'));
   setArrow('1', false); setArrow('2', false);
   document.getElementById('cycle-result-card').style.display = 'none';
+  document.getElementById('cycle-neg-trace-card').style.display = 'none';
+  document.getElementById('neg-country-compare').style.display = 'none';
 
   // 1) Catalog
   setStep('catalog', 'active', 'Querying...');
@@ -882,11 +1034,18 @@ async function runCycle() {
     offerings = catalogData.service_offerings || [];
 
     if (!offerings.length) {
-      setStep('catalog', 'error', 'No service offerings');
+      setStep('catalog', 'error', 'No service offerings registered');
       btn.disabled = false;
       return;
     }
-    setStep('catalog', 'done', `${offerings.length} offering(s)`);
+    // country 일치 여부 미리 체크해서 상태 표시
+    const policyCountry = offerings[0].usage_policy?.country;
+    const countryOk = !policyCountry || policyCountry === vc.country;
+    setStep('catalog', 'done',
+      countryOk
+        ? `${offerings.length} offering(s) — proceeding to negotiate`
+        : `${offerings.length} offering(s) found — policy check pending`
+    );
     setArrow('1', true);
   } catch (e) {
     setStep('catalog', 'error', 'Connection error');
@@ -897,6 +1056,7 @@ async function runCycle() {
   // 2) Negotiate
   await sleep(400);
   setStep('negotiate', 'active', 'Negotiating...');
+  document.getElementById('cycle-neg-trace-card').style.display = 'none';
   let contractId;
   try {
     const headers = {
@@ -909,10 +1069,18 @@ async function runCycle() {
     });
     const neg = await r.json();
     contractId = neg.contract_id;
+
+    // trace 표시
+    if (neg.negotiation_trace) {
+      renderInlineTrace(neg.negotiation_trace, true);
+    }
+
     setStep('negotiate', 'done', 'Contract issued');
     setArrow('2', true);
   } catch (e) {
-    setStep('negotiate', 'error', 'Negotiation failed');
+    // 실패 시에도 로그 폴링해서 trace 표시 시도
+    await loadNegLogInline();
+    setStep('negotiate', 'error', 'Rejected — policy mismatch');
     btn.disabled = false;
     return;
   }
@@ -941,6 +1109,98 @@ async function runCycle() {
 }
 
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+// ── Trace 렌더링 헬퍼 ──────────────────────────────────────────────────────
+function buildTraceHTML(trace) {
+  return trace.map(t => {
+    const ok = t.status === 'success';
+    const icon = ok ? '✓' : '✕';
+    // detail 안의 country= / 정책= 등 하이라이트
+    const detail = t.detail
+      .replace(/(consumer_id|consumer country|policy requires country|name|id|contract_id)=([^\s|]+)/g,
+        (_, k, v) => `<span class="hi">${k}=<strong>${v}</strong></span>`)
+      .replace(/(→\s*mismatch)/g, '<span class="hi-fail">$1</span>')
+      .replace(/(→\s*match)/g, '<span class="hi">$1</span>');
+
+    return `
+      <div class="trace-step">
+        <div class="trace-icon ${ok ? 'ok' : 'fail'}">${icon}</div>
+        <div class="trace-body">
+          <div class="trace-name ${ok ? 'ok' : 'fail'}">Step ${t.step}. ${t.name}</div>
+          <div class="trace-detail">${detail}</div>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+function renderInlineTrace(trace, success) {
+  const card = document.getElementById('cycle-neg-trace-card');
+  const body = document.getElementById('cycle-neg-trace-body');
+  const compareEl = document.getElementById('neg-country-compare');
+  const badgeEl   = document.getElementById('neg-overall-badge');
+
+  // 전체 결과 배지
+  badgeEl.innerHTML = success
+    ? '<span class="neg-badge-ok">✓ APPROVED</span>'
+    : '<span class="neg-badge-fail">✕ REJECTED</span>';
+
+  // Step 3 (country validation) — parse compare card
+  const countryStep = trace.find(t => t.step === 3);
+  if (countryStep) {
+    // "consumer country=KOR | policy requires country=KOR → match"
+    const consumerMatch = countryStep.detail.match(/consumer country=([^\s|]+)/);
+    const policyMatch   = countryStep.detail.match(/policy requires country=([^\s|]+)/);
+    const consumerCountry = consumerMatch ? consumerMatch[1] : '?';
+    const policyCountry   = policyMatch   ? policyMatch[1]  : '?';
+    const matched = countryStep.status === 'success';
+
+    // service name & consumer id — from step 2, 1
+    const step2 = trace.find(t => t.step === 2);
+    const step1 = trace.find(t => t.step === 1);
+    const offeringName  = step2 ? (step2.detail.match(/name=([^\s|]+)/) || [])[1] || '' : '';
+    const consumerId    = step1 ? (step1.detail.match(/consumer_id=([^\s|]+)/) || [])[1] || '' : '';
+
+    document.getElementById('neg-consumer-id').textContent      = consumerId;
+    document.getElementById('neg-consumer-country').textContent = consumerCountry;
+    document.getElementById('neg-consumer-country').style.color = matched ? 'var(--green)' : 'var(--red)';
+
+    document.getElementById('neg-offering-name').textContent   = offeringName;
+    document.getElementById('neg-policy-country').textContent  = policyCountry;
+    document.getElementById('neg-policy-country').style.color  = 'var(--accent)';
+
+    const matchIcon = document.getElementById('neg-match-icon');
+    matchIcon.textContent = matched ? '✓' : '✕';
+    matchIcon.style.color = matched ? 'var(--green)' : 'var(--red)';
+
+    const verdict = document.getElementById('neg-verdict');
+    if (matched) {
+      verdict.textContent = `✓  Country code match (${consumerCountry} = ${policyCountry}) — negotiation approved`;
+      verdict.style.background = 'rgba(5,150,105,0.08)';
+      verdict.style.color      = 'var(--green)';
+      verdict.style.border     = '1px solid rgba(5,150,105,0.25)';
+    } else {
+      verdict.textContent = `✕  Country code mismatch (consumer: ${consumerCountry} ≠ policy requires: ${policyCountry}) — negotiation rejected`;
+      verdict.style.background = 'rgba(220,38,38,0.06)';
+      verdict.style.color      = 'var(--red)';
+      verdict.style.border     = '1px solid rgba(220,38,38,0.2)';
+    }
+    compareEl.style.display = 'block';
+  }
+
+  // 단계별 trace 목록
+  body.innerHTML = buildTraceHTML(trace);
+  card.style.display = 'block';
+}
+
+async function loadNegLogInline() {
+  try {
+    const r = await fetch('/negotiate-log');
+    const data = await r.json();
+    if (data.logs && data.logs.length) {
+      renderInlineTrace(data.logs[0].trace, data.logs[0].overall === 'success');
+    }
+  } catch {}
+}
 
 // Init
 checkServer();

@@ -41,6 +41,7 @@ def self_did() -> str:
 service_offerings = {}   # service_offering_id -> service_offering dict
 usage_policies    = {}   # usage_policy_id -> usage_policy dict
 contracts         = {}   # contract_id -> {"service_offering_id", "consumer_id"}
+negotiate_logs    = []   # 협상 이력 (최근 50건)
 
 # ── FastAPI ───────────────────────────────────────────────────────────────────
 app = FastAPI()
@@ -237,19 +238,16 @@ def register_service_offering(req: ServiceOfferingRequest):
 def get_catalog(authorization: str = Header(...)):
     """
     Authorization: Bearer <vc_jwt>
-    VC 검증 후, 정책 조건에 맞는 Service Offering만 반환합니다.
+    VC를 검증하고 모든 Service Offering을 반환합니다.
+    Usage Policy 조건 검증은 Negotiate 단계에서 수행합니다.
     """
     vc_jwt = authorization.removeprefix("Bearer ")
-    claims = verify_vc(vc_jwt)
+    verify_vc(vc_jwt)  # VC 서명만 확인, country 필터링은 하지 않음
 
     result = []
     for usage_policy_id, usage_policy in usage_policies.items():
         service_offering = service_offerings.get(usage_policy["service_offering_id"], {})
         rules = usage_policy["rules"]
-
-        # Usage Policy 평가: country 조건만 체크 (MVP)
-        if "country" in rules and claims.get("country") != rules["country"]:
-            continue
 
         result.append({
             "service_offering_id": usage_policy_id,
@@ -267,24 +265,97 @@ class NegotiateRequest(BaseModel):
 
 @app.post("/negotiate")
 def negotiate(req: NegotiateRequest, authorization: str = Header(...)):
-    """VC 검증 + Usage Policy 재확인 후 Contract ID를 발급합니다."""
-    vc_jwt = authorization.removeprefix("Bearer ")
-    claims = verify_vc(vc_jwt)
+    """Verify VC + re-validate Usage Policy, then issue a Contract ID."""
+    import datetime
 
+    vc_jwt = authorization.removeprefix("Bearer ")
+    trace = []
+
+    # Step 1: VC signature verification
+    try:
+        claims = verify_vc(vc_jwt)
+        trace.append({
+            "step": 1,
+            "name": "VC Signature Verification",
+            "status": "success",
+            "detail": f"consumer_id={req.consumer_id} | issuer DID signature verified"
+        })
+    except HTTPException as e:
+        trace.append({"step": 1, "name": "VC Signature Verification", "status": "fail", "detail": str(e.detail)})
+        _save_log(req.consumer_id, trace, "fail")
+        raise
+
+    # Step 2: Service Offering lookup
     usage_policy = usage_policies.get(req.service_offering_id)
     if not usage_policy:
-        raise HTTPException(status_code=404, detail="Service Offering 없음")
+        trace.append({"step": 2, "name": "Service Offering Lookup", "status": "fail",
+                      "detail": f"service_offering_id={req.service_offering_id} not found"})
+        _save_log(req.consumer_id, trace, "fail")
+        raise HTTPException(status_code=404, detail="Service Offering not found")
 
+    service_offering = service_offerings.get(usage_policy["service_offering_id"], {})
+    trace.append({
+        "step": 2,
+        "name": "Service Offering Lookup",
+        "status": "success",
+        "detail": f"name={service_offering.get('name')} | id={req.service_offering_id[:8]}…"
+    })
+
+    # Step 3: Usage Policy country validation
     rules = usage_policy["rules"]
-    if "country" in rules and claims.get("country") != rules["country"]:
-        raise HTTPException(status_code=403, detail="Usage Policy 조건 불일치")
+    consumer_country = claims.get("country", "(none)")
+    policy_country   = rules.get("country", "(unrestricted)")
 
+    if "country" in rules and consumer_country != rules["country"]:
+        trace.append({
+            "step": 3,
+            "name": "Usage Policy Check — country",
+            "status": "fail",
+            "detail": f"consumer country={consumer_country} | policy requires country={policy_country} → mismatch"
+        })
+        _save_log(req.consumer_id, trace, "fail")
+        raise HTTPException(status_code=403, detail="Usage Policy condition not satisfied")
+
+    trace.append({
+        "step": 3,
+        "name": "Usage Policy Check — country",
+        "status": "success",
+        "detail": f"consumer country={consumer_country} | policy requires country={policy_country} → match"
+    })
+
+    # Step 4: Contract issuance
     contract_id = str(uuid.uuid4())
     contracts[contract_id] = {
         "service_offering_id": usage_policy["service_offering_id"],
         "consumer_id":         req.consumer_id,
     }
-    return {"contract_id": contract_id}
+    trace.append({
+        "step": 4,
+        "name": "Contract Issuance",
+        "status": "success",
+        "detail": f"contract_id={contract_id[:8]}… issued successfully"
+    })
+
+    _save_log(req.consumer_id, trace, "success")
+    return {"contract_id": contract_id, "negotiation_trace": trace}
+
+
+def _save_log(consumer_id: str, trace: list, overall: str):
+    import datetime
+    negotiate_logs.append({
+        "timestamp": datetime.datetime.now().isoformat(timespec="seconds"),
+        "consumer_id": consumer_id,
+        "overall": overall,
+        "trace": trace,
+    })
+    if len(negotiate_logs) > 50:
+        negotiate_logs.pop(0)
+
+
+@app.get("/negotiate-log")
+def get_negotiate_log():
+    """최근 협상 이력을 반환합니다."""
+    return {"participant": PARTICIPANT_ID, "logs": list(reversed(negotiate_logs))}
 
 
 # ── 데이터 전송 ───────────────────────────────────────────────────────────────
