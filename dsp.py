@@ -14,7 +14,11 @@ import jwt
 import httpx
 
 from fastapi import FastAPI, Header, HTTPException
+from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
+import os
+
+from fastapi.middleware.cors import CORSMiddleware
 
 # ── 키 로드 ──────────────────────────────────────────────────────────────────
 with open("keys/issuer_private.pem") as f:
@@ -22,14 +26,91 @@ with open("keys/issuer_private.pem") as f:
 with open("keys/issuer_public.pem") as f:
     PUBLIC_KEY = f.read()
 
+# ── 포트 (argparse 전에 기본값, 실행 시 덮어씀) ──────────────────────────────
+PARTICIPANT_PORT = 8001   # uvicorn 실행 포트와 동일하게 맞춰야 함
+
+def self_url() -> str:
+    """이 DSP 자신의 base URL을 반환합니다."""
+    return f"http://localhost:{PARTICIPANT_PORT}"
+
+def self_did() -> str:
+    """did:web 형식의 자기 DID를 반환합니다. 포트 포함 시 %3A로 인코딩."""
+    return f"did:web:localhost%3A{PARTICIPANT_PORT}"
+
 # ── 인메모리 저장소 ───────────────────────────────────────────────────────────
-assets    = {}   # asset_id -> asset dict
-policies  = {}   # policy_id -> policy dict
-contracts = {}   # contract_id -> {"asset_id", "consumer_id"}
+service_offerings = {}   # service_offering_id -> service_offering dict
+usage_policies    = {}   # usage_policy_id -> usage_policy dict
+contracts         = {}   # contract_id -> {"service_offering_id", "consumer_id"}
 
 # ── FastAPI ───────────────────────────────────────────────────────────────────
 app = FastAPI()
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://localhost:8001",
+        "http://localhost:8002",
+        "http://127.0.0.1:8001",
+        "http://127.0.0.1:8002",
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 PARTICIPANT_ID = "unknown"  # argparse로 덮어씀
+
+
+# ── UI 서빙 ───────────────────────────────────────────────────────────────────
+@app.get("/", response_class=HTMLResponse)
+def serve_ui():
+    """대시보드 HTML을 서빙합니다."""
+    html_path = os.path.join(os.path.dirname(__file__), "dashboard.html")
+    with open(html_path, encoding="utf-8") as f:
+        return f.read()
+
+@app.get("/participant")
+def get_participant():
+    return {"name": PARTICIPANT_ID}
+
+
+# ── DID 문서 서빙 ─────────────────────────────────────────────────────────────
+@app.get("/.well-known/did.json")
+def get_did_document():
+    """
+    did:web resolve 엔드포인트.
+    did:web:localhost%3A8001  →  GET http://localhost:8001/.well-known/did.json
+    공개키를 JWK 형식으로 노출합니다.
+    """
+    from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
+    import base64
+    import cryptography.hazmat.primitives.serialization as ser
+
+    pub = ser.load_pem_public_key(PUBLIC_KEY.encode())
+    # Ed25519 raw 32바이트 → base64url
+    raw_bytes = pub.public_bytes(Encoding.Raw, PublicFormat.Raw)
+    pub_b64 = base64.urlsafe_b64encode(raw_bytes).rstrip(b"=").decode()
+
+    did = self_did()
+    key_id = f"{did}#key-1"
+
+    return {
+        "@context": ["https://www.w3.org/ns/did/v1"],
+        "id": did,
+        "verificationMethod": [{
+            "id": key_id,
+            "type": "JsonWebKey2020",
+            "controller": did,
+            "publicKeyJwk": {
+                "kty": "OKP",
+                "crv": "Ed25519",
+                "x": pub_b64,
+            }
+        }],
+        "authentication": [key_id],
+        "assertionMethod": [key_id],
+    }
 
 
 # ── VC 발급 ───────────────────────────────────────────────────────────────────
@@ -41,8 +122,9 @@ class VCRequest(BaseModel):
 @app.post("/issue-vc")
 def issue_vc(req: VCRequest):
     """간단한 Membership VC를 JWT로 발급합니다."""
+    issuer_did = self_did()
     payload = {
-        "iss": "did:web:issuer",
+        "iss": issuer_did,
         "sub": req.participant_id,
         "vc": {
             "type": ["VerifiableCredential", "MembershipCredential"],
@@ -56,34 +138,98 @@ def issue_vc(req: VCRequest):
         }
     }
     token = jwt.encode(payload, PRIVATE_KEY, algorithm="EdDSA",
-                       headers={"kid": "did:web:issuer#key-1"})
+                       headers={"kid": f"{issuer_did}#key-1"})
     return {"vc_jwt": token}
+
+
+# ── DID resolve 헬퍼 ─────────────────────────────────────────────────────────
+def resolve_did_public_key(kid: str) -> str:
+    """
+    kid 예시: "did:web:localhost%3A8001#key-1"
+    1. DID 부분만 추출  →  did:web:localhost%3A8001
+    2. URL로 변환       →  http://localhost:8001/.well-known/did.json
+    3. DID 문서에서 publicKeyJwk.x 꺼내서 PEM으로 변환 후 반환
+    """
+    import base64
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
+    from cryptography.hazmat.primitives import serialization
+
+    # kid → did (fragment 제거)
+    did = kid.split("#")[0]  # "did:web:localhost%3A8001"
+
+    # did:web → URL 변환 (RFC 준수)
+    # did:web:localhost%3A8001  →  http://localhost:8001/.well-known/did.json
+    method_specific = did.removeprefix("did:web:")          # "localhost%3A8001"
+    decoded = method_specific.replace("%3A", ":").replace("%2F", "/")
+    did_url = f"http://{decoded}/.well-known/did.json"
+
+    # DID 문서 fetch
+    try:
+        resp = httpx.get(did_url, timeout=10)
+        resp.raise_for_status()
+        did_doc = resp.json()
+    except Exception as e:
+        raise HTTPException(status_code=401, detail=f"DID resolve 실패 ({did_url}): {e}")
+
+    # verificationMethod에서 공개키 추출
+    methods = did_doc.get("verificationMethod", [])
+    target_id = kid
+    jwk = None
+    for m in methods:
+        if m.get("id") == target_id:
+            jwk = m.get("publicKeyJwk")
+            break
+    if not jwk:
+        raise HTTPException(status_code=401, detail=f"kid '{kid}' 에 해당하는 키 없음")
+
+    # JWK(x: base64url) → Ed25519PublicKey → PEM
+    x_bytes = base64.urlsafe_b64decode(jwk["x"] + "==")
+    pub_key = Ed25519PublicKey.from_public_bytes(x_bytes)
+    pem = pub_key.public_bytes(
+        serialization.Encoding.PEM,
+        serialization.PublicFormat.SubjectPublicKeyInfo
+    ).decode()
+    return pem
 
 
 # ── VC 검증 헬퍼 ──────────────────────────────────────────────────────────────
 def verify_vc(vc_jwt: str) -> dict:
-    """JWT 서명 검증 후 membership 클레임을 반환합니다."""
+    """
+    1. JWT header의 kid 추출
+    2. kid로 DID resolve → 공개키 PEM 획득
+    3. 공개키로 서명 검증
+    4. membership 클레임 반환
+    """
     try:
-        decoded = jwt.decode(vc_jwt, PUBLIC_KEY, algorithms=["EdDSA"],
+        header = jwt.get_unverified_header(vc_jwt)
+        kid = header.get("kid")
+        if not kid:
+            raise ValueError("JWT header에 kid 없음")
+
+        public_key_pem = resolve_did_public_key(kid)
+
+        decoded = jwt.decode(vc_jwt, public_key_pem, algorithms=["EdDSA"],
                              options={"verify_exp": False})
         return decoded["vc"]["credentialSubject"]["membership"]
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=401, detail=f"VC 검증 실패: {e}")
 
 
-# ── Asset 등록 ────────────────────────────────────────────────────────────────
-class AssetRequest(BaseModel):
+# ── Service Offering 등록 ─────────────────────────────────────────────────────
+class ServiceOfferingRequest(BaseModel):
     name: str
     data_url: str         # 실제 데이터 위치 (다른 DSP에는 숨김)
-    policy: dict          # e.g. {"country": "DE"}
+    usage_policy: dict    # e.g. {"country": "DE"}
 
-@app.post("/assets")
-def register_asset(req: AssetRequest):
-    asset_id  = str(uuid.uuid4())
-    policy_id = str(uuid.uuid4())
-    assets[asset_id]   = {"name": req.name, "data_url": req.data_url}
-    policies[policy_id] = {"asset_id": asset_id, "rules": req.policy}
-    return {"asset_id": asset_id, "policy_id": policy_id}
+@app.post("/service-offerings")
+def register_service_offering(req: ServiceOfferingRequest):
+    service_offering_id = str(uuid.uuid4())
+    usage_policy_id     = str(uuid.uuid4())
+    service_offerings[service_offering_id] = {"name": req.name, "data_url": req.data_url}
+    usage_policies[usage_policy_id] = {"service_offering_id": service_offering_id, "rules": req.usage_policy}
+    return {"service_offering_id": service_offering_id, "usage_policy_id": usage_policy_id}
 
 
 # ── Catalog 조회 ──────────────────────────────────────────────────────────────
@@ -91,52 +237,52 @@ def register_asset(req: AssetRequest):
 def get_catalog(authorization: str = Header(...)):
     """
     Authorization: Bearer <vc_jwt>
-    VC 검증 후, 정책 조건에 맞는 오퍼만 반환합니다.
+    VC 검증 후, 정책 조건에 맞는 Service Offering만 반환합니다.
     """
     vc_jwt = authorization.removeprefix("Bearer ")
     claims = verify_vc(vc_jwt)
 
-    offers = []
-    for policy_id, policy in policies.items():
-        asset = assets.get(policy["asset_id"], {})
-        rules = policy["rules"]
+    result = []
+    for usage_policy_id, usage_policy in usage_policies.items():
+        service_offering = service_offerings.get(usage_policy["service_offering_id"], {})
+        rules = usage_policy["rules"]
 
-        # 정책 평가: country 조건만 체크 (MVP)
+        # Usage Policy 평가: country 조건만 체크 (MVP)
         if "country" in rules and claims.get("country") != rules["country"]:
             continue
 
-        offers.append({
-            "offer_id":  policy_id,
-            "asset_name": asset.get("name"),
-            "policy":    rules,
+        result.append({
+            "service_offering_id": usage_policy_id,
+            "name":                service_offering.get("name"),
+            "usage_policy":        rules,
         })
 
-    return {"participant": PARTICIPANT_ID, "offers": offers}
+    return {"participant": PARTICIPANT_ID, "service_offerings": result}
 
 
 # ── 계약 협상 ─────────────────────────────────────────────────────────────────
 class NegotiateRequest(BaseModel):
-    offer_id: str
+    service_offering_id: str
     consumer_id: str
 
 @app.post("/negotiate")
 def negotiate(req: NegotiateRequest, authorization: str = Header(...)):
-    """VC 검증 + 정책 재확인 후 계약 ID를 발급합니다."""
+    """VC 검증 + Usage Policy 재확인 후 Contract ID를 발급합니다."""
     vc_jwt = authorization.removeprefix("Bearer ")
     claims = verify_vc(vc_jwt)
 
-    policy = policies.get(req.offer_id)
-    if not policy:
-        raise HTTPException(status_code=404, detail="오퍼 없음")
+    usage_policy = usage_policies.get(req.service_offering_id)
+    if not usage_policy:
+        raise HTTPException(status_code=404, detail="Service Offering 없음")
 
-    rules = policy["rules"]
+    rules = usage_policy["rules"]
     if "country" in rules and claims.get("country") != rules["country"]:
-        raise HTTPException(status_code=403, detail="정책 조건 불일치")
+        raise HTTPException(status_code=403, detail="Usage Policy 조건 불일치")
 
     contract_id = str(uuid.uuid4())
     contracts[contract_id] = {
-        "asset_id":    policy["asset_id"],
-        "consumer_id": req.consumer_id,
+        "service_offering_id": usage_policy["service_offering_id"],
+        "consumer_id":         req.consumer_id,
     }
     return {"contract_id": contract_id}
 
@@ -150,18 +296,18 @@ class TransferRequest(BaseModel):
 def transfer(req: TransferRequest):
     contract = contracts.get(req.contract_id)
     if not contract:
-        raise HTTPException(status_code=404, detail="계약 없음")
+        raise HTTPException(status_code=404, detail="Contract 없음")
     if contract["consumer_id"] != req.consumer_id:
         raise HTTPException(status_code=403, detail="consumer_id 불일치")
 
-    asset = assets[contract["asset_id"]]
-    
+    service_offering = service_offerings[contract["service_offering_id"]]
+
     # 실제 API 호출
-    actual_data = httpx.get(asset["data_url"], timeout=30).json()
+    actual_data = httpx.get(service_offering["data_url"], timeout=30).json()
     return {
         "status": "transferred",
         "data": actual_data,
-        "message": f"'{asset['name']}' 데이터 전송 완료",
+        "message": f"'{service_offering['name']}' Data transfer completed.",
     }
 
 # ── Consumer 역할: 상대 DSP에서 데이터 가져오기 ───────────────────────────────
@@ -176,18 +322,18 @@ def fetch_from(req: FetchRequest):
 
     # 1) Catalog 조회
     catalog = httpx.get(f"{req.target_url}/catalog", headers=headers, timeout=30).json()
-    offers  = catalog.get("offers", [])
-    if not offers:
-        raise HTTPException(status_code=404, detail="이용 가능한 오퍼 없음")
-    offer_id = offers[0]["offer_id"]
+    offerings = catalog.get("service_offerings", [])
+    if not offerings:
+        raise HTTPException(status_code=404, detail="이용 가능한 Service Offering 없음")
+    service_offering_id = offerings[0]["service_offering_id"]
 
-    # 2) 협상
+    # 2) 계약 협상
     neg = httpx.post(f"{req.target_url}/negotiate", headers=headers, json={
-        "offer_id": offer_id, "consumer_id": req.my_id
+        "service_offering_id": service_offering_id, "consumer_id": req.my_id
     }, timeout=30).json()
     contract_id = neg["contract_id"]
 
-    # 3) 전송 요청
+    # 3) 데이터 전송 요청
     result = httpx.post(f"{req.target_url}/transfer", json={
         "contract_id": contract_id, "consumer_id": req.my_id
     }, timeout=30).json()
@@ -204,5 +350,6 @@ if __name__ == "__main__":
     parser.add_argument("--name", type=str, default="dsp-participant")
     args = parser.parse_args()
 
-    PARTICIPANT_ID = args.name
-    uvicorn.run(app, host="0.0.0.0", port=args.port)
+    PARTICIPANT_ID   = args.name
+    PARTICIPANT_PORT = args.port
+    uvicorn.run(app, host="localhost", port=args.port)

@@ -1,0 +1,949 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DSP Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg:       #f8fafc;
+    --surface:  #ffffff;
+    --border:   #e2e8f0;
+    --accent:   #0066cc;
+    --green:    #059669;
+    --red:      #dc2626;
+    --text:     #0f172a;
+    --muted:    #64748b;
+    --mono:     'IBM Plex Mono', monospace;
+    --sans:     'Inter', sans-serif;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    min-height: 100vh;
+  }
+
+  /* Header */
+  header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 24px 48px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+  }
+
+  .logo {
+    font-family: var(--mono);
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--text);
+  }
+  .logo span { color: var(--accent); }
+
+  .header-right {
+    display: flex;
+    align-items: center;
+    gap: 24px;
+  }
+
+  .participant-label {
+    font-family: var(--mono);
+    font-size: 14px;
+    color: var(--accent);
+    padding: 8px 16px;
+    border: 1px solid var(--accent);
+    border-radius: 6px;
+    background: rgba(0,102,204,0.05);
+  }
+
+  .status {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-family: var(--mono);
+    font-size: 14px;
+    color: var(--muted);
+  }
+  .status .dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: var(--green);
+    animation: pulse 2s infinite;
+  }
+  @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.5; } }
+
+  /* Navigation */
+  .nav {
+    display: flex;
+    justify-content: center;
+    gap: 8px;
+    padding: 24px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+  }
+
+  .nav-btn {
+    font-family: var(--mono);
+    font-size: 15px;
+    font-weight: 500;
+    padding: 14px 28px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--muted);
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .nav-btn:hover {
+    color: var(--text);
+    border-color: var(--text);
+  }
+  .nav-btn.active {
+    background: var(--accent);
+    color: #fff;
+    border-color: var(--accent);
+  }
+
+  /* Main */
+  main {
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 48px 24px;
+  }
+
+  .page { display: none; animation: fadeIn 0.2s ease; }
+  .page.active { display: block; }
+  @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+  .page-title {
+    font-size: 32px;
+    font-weight: 700;
+    margin-bottom: 8px;
+  }
+  .page-sub {
+    font-family: var(--mono);
+    font-size: 14px;
+    color: var(--muted);
+    margin-bottom: 40px;
+  }
+
+  /* Card */
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 32px;
+    margin-bottom: 24px;
+  }
+  .card-title {
+    font-size: 18px;
+    font-weight: 600;
+    margin-bottom: 24px;
+    color: var(--text);
+  }
+
+  /* Form */
+  .form-group {
+    margin-bottom: 20px;
+  }
+  .form-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+  }
+
+  label {
+    display: block;
+    font-family: var(--mono);
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--muted);
+    margin-bottom: 8px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  input, select, textarea {
+    width: 100%;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 16px;
+    padding: 16px 20px;
+    border-radius: 8px;
+    outline: none;
+    transition: all 0.15s;
+  }
+  input:focus, select:focus, textarea:focus {
+    border-color: var(--accent);
+    background: #fff;
+    box-shadow: 0 0 0 3px rgba(0,102,204,0.1);
+  }
+  textarea { resize: vertical; min-height: 100px; }
+
+  /* Buttons */
+  .btn {
+    font-family: var(--mono);
+    font-size: 15px;
+    font-weight: 600;
+    padding: 16px 32px;
+    border-radius: 8px;
+    border: none;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .btn-primary {
+    background: var(--accent);
+    color: #fff;
+  }
+  .btn-primary:hover {
+    filter: brightness(1.1);
+  }
+  .btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .btn-row {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: 24px;
+  }
+
+  /* Result */
+  .result-box {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 20px;
+    font-family: var(--mono);
+    font-size: 14px;
+    line-height: 1.8;
+    white-space: pre-wrap;
+    word-break: break-all;
+    max-height: 300px;
+    overflow-y: auto;
+    margin-top: 24px;
+  }
+  .result-box.hidden { display: none; }
+  .result-box .ok  { color: var(--green); font-weight: 600; }
+  .result-box .err { color: var(--red); font-weight: 600; }
+  .result-box .key { color: var(--accent); }
+  .result-box .val { color: #b45309; }
+
+  /* VC Badge */
+  .vc-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: rgba(5,150,105,0.08);
+    border: 1px solid rgba(5,150,105,0.2);
+    border-radius: 8px;
+    padding: 16px 20px;
+    margin-bottom: 12px;
+    font-family: var(--mono);
+    font-size: 14px;
+    color: var(--green);
+  }
+  .vc-item .jwt-preview {
+    color: var(--muted);
+    font-size: 12px;
+    max-width: 200px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /* Offer Card */
+  .offer-card {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 20px 24px;
+    margin-bottom: 12px;
+    transition: all 0.15s;
+  }
+  .offer-card:hover {
+    border-color: var(--accent);
+  }
+  .offer-name {
+    font-size: 16px;
+    font-weight: 600;
+    margin-bottom: 4px;
+  }
+  .offer-id {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--muted);
+  }
+  .policy-tag {
+    font-family: var(--mono);
+    font-size: 13px;
+    background: rgba(0,102,204,0.1);
+    color: var(--accent);
+    padding: 8px 14px;
+    border-radius: 6px;
+  }
+
+  /* Pipeline */
+  .pipeline {
+    display: flex;
+    align-items: center;
+    gap: 0;
+    margin: 32px 0;
+  }
+  .pipeline-step {
+    flex: 1;
+    text-align: center;
+    padding: 28px 16px;
+    background: var(--bg);
+    border: 2px solid var(--border);
+    border-radius: 12px;
+    font-family: var(--mono);
+    transition: all 0.3s;
+  }
+  .pipeline-step.done {
+    border-color: var(--green);
+    background: rgba(5,150,105,0.08);
+  }
+  .pipeline-step.active {
+    border-color: var(--accent);
+    background: rgba(0,102,204,0.08);
+  }
+  .pipeline-step.error {
+    border-color: var(--red);
+    background: rgba(220,38,38,0.05);
+  }
+  .step-num {
+    font-size: 12px;
+    color: var(--muted);
+    margin-bottom: 8px;
+  }
+  .step-name {
+    font-size: 16px;
+    font-weight: 600;
+    margin-bottom: 8px;
+  }
+  .step-status {
+    font-size: 13px;
+    color: var(--muted);
+    min-height: 20px;
+  }
+  .pipeline-step.done .step-status { color: var(--green); }
+  .pipeline-step.active .step-status { color: var(--accent); }
+  .pipeline-step.error .step-status { color: var(--red); }
+
+  .pipeline-arrow {
+    width: 40px;
+    text-align: center;
+    font-size: 20px;
+    color: var(--border);
+    flex-shrink: 0;
+  }
+  .pipeline-arrow.lit { color: var(--accent); }
+
+  /* Table */
+  .data-table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+  .data-table th {
+    font-family: var(--mono);
+    font-size: 12px;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--muted);
+    padding: 16px;
+    text-align: left;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg);
+  }
+  .data-table td {
+    font-family: var(--mono);
+    font-size: 14px;
+    padding: 16px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .badge {
+    font-family: var(--mono);
+    font-size: 12px;
+    padding: 6px 12px;
+    border-radius: 6px;
+  }
+  .badge-blue {
+    background: rgba(0,102,204,0.1);
+    color: var(--accent);
+  }
+  .badge-green {
+    background: rgba(5,150,105,0.1);
+    color: var(--green);
+  }
+
+  .empty-state {
+    text-align: center;
+    padding: 48px;
+    font-family: var(--mono);
+    font-size: 14px;
+    color: var(--muted);
+  }
+
+  /* Spinner */
+  .spinner {
+    display: inline-block;
+    width: 16px;
+    height: 16px;
+    border: 2px solid var(--border);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.6s linear infinite;
+    margin-right: 8px;
+    vertical-align: middle;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* JSON */
+  .json-key { color: var(--accent); }
+  .json-str { color: #b45309; }
+  .json-num { color: #c2410c; }
+  .json-bool { color: #7c3aed; }
+  .json-null { color: var(--muted); }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 8px; height: 8px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+</style>
+</head>
+<body>
+
+<!-- Header -->
+<header>
+  <div class="logo"><span>OPTIMAL</span>.LOADS / DSP</div>
+  <div class="header-right">
+    <div class="participant-label" id="participant-label">-</div>
+    <div class="status">
+      <span class="dot"></span>
+      <span id="server-status">Connecting...</span>
+    </div>
+  </div>
+</header>
+
+<!-- Navigation -->
+<nav class="nav">
+  <button class="nav-btn active" data-page="vc" onclick="showPage('vc')">VC Management</button>
+  <button class="nav-btn" data-page="assets" onclick="showPage('assets')">Service Offerings</button>
+  <button class="nav-btn" data-page="catalog" onclick="showPage('catalog')">Catalog Query</button>
+  <button class="nav-btn" data-page="cycle" onclick="showPage('cycle')">Resource Request</button>
+</nav>
+
+<!-- Main Content -->
+<main>
+
+  <!-- VC Management -->
+  <div class="page active" id="page-vc">
+    <div class="page-title">VC Management</div>
+    <div class="page-sub">Verifiable Credential - EdDSA signed JWT</div>
+
+    <div class="card">
+      <div class="card-title">Issue VC</div>
+      <div class="form-group">
+        <label>Participant ID</label>
+        <input id="vc-pid" type="text" placeholder="did:web:company-A" value="did:web:company-A">
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Country</label>
+          <input id="vc-country" type="text" placeholder="KOR" value="KOR">
+        </div>
+        <div class="form-group">
+          <label>Membership ID</label>
+          <input id="vc-mid" type="text" placeholder="company-A" value="company-A">
+        </div>
+      </div>
+      <div class="btn-row">
+        <button class="btn btn-primary" onclick="issueVC()">Issue VC</button>
+      </div>
+      <div id="vc-result" class="result-box hidden"></div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Issued VCs</div>
+      <div id="vc-list">
+        <div class="empty-state">No VCs issued yet</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Service Offerings -->
+  <div class="page" id="page-assets">
+    <div class="page-title">Service Offerings</div>
+    <div class="page-sub">Register data services and configure usage policies as a Provider</div>
+
+    <div class="card">
+      <div class="card-title">Register New Service Offering</div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Service Offering Name</label>
+          <input id="asset-name" type="text" placeholder="Weather Data (ECMWF)">
+        </div>
+        <div class="form-group">
+          <label>Allowed Country</label>
+          <input id="asset-country" type="text" placeholder="KOR" value="KOR">
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Data URL</label>
+        <input id="asset-url" type="text" placeholder="http://..." value="http://52.78.244.211/api/griddata?source=ecmwf&dataset_code=computed&model=ifs&variable=wind_dir_10m&run_time_utc=2025-07-01T00:00:00Z&step_hours=0&lat=35.0&lon=129.0&buffer_km=50.0">
+      </div>
+      <div class="btn-row">
+        <button class="btn btn-primary" onclick="registerAsset()">Register</button>
+      </div>
+      <div id="asset-result" class="result-box hidden"></div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Registered Service Offerings</div>
+      <div id="asset-list">
+        <div class="empty-state">No service offerings registered yet</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Catalog Query -->
+  <div class="page" id="page-catalog">
+    <div class="page-title">Catalog Query</div>
+    <div class="page-sub">Browse service offerings from a counterpart DSP as a Consumer</div>
+
+    <div class="card">
+      <div class="card-title">Query Settings</div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Target DSP URL</label>
+          <input id="cat-target" type="text" placeholder="http://localhost:8001" value="http://localhost:8001">
+        </div>
+        <div class="form-group">
+          <label>My VC JWT</label>
+          <select id="cat-vc-select">
+            <option value="">- Select VC -</option>
+          </select>
+        </div>
+      </div>
+      <div class="btn-row">
+        <button class="btn btn-primary" onclick="queryCatalog()">Query</button>
+      </div>
+    </div>
+
+    <div id="catalog-result-area"></div>
+  </div>
+
+  <!-- Resource Request -->
+  <div class="page" id="page-cycle">
+    <div class="page-title">Resource Request</div>
+    <div class="page-sub">Automated execution: catalog - negotiate - transfer</div>
+
+    <div class="card">
+      <div class="card-title">Configuration</div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Target DSP URL (Provider)</label>
+          <input id="cycle-target" type="text" value="http://localhost:8001">
+        </div>
+        <div class="form-group">
+          <label>My VC JWT</label>
+          <select id="cycle-vc-select">
+            <option value="">- Select VC -</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-group">
+        <label>My ID</label>
+        <input id="cycle-myid" type="text" value="did:web:company-B">
+      </div>
+      <div class="btn-row">
+        <button class="btn btn-primary" id="cycle-btn" onclick="runCycle()">Run</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Execution Flow</div>
+      <div class="pipeline">
+        <div class="pipeline-step" id="ps-catalog">
+          <div class="step-num">01</div>
+          <div class="step-name">CATALOG</div>
+          <div class="step-status" id="ps-catalog-s">Waiting</div>
+        </div>
+        <div class="pipeline-arrow" id="pa-1">→</div>
+        <div class="pipeline-step" id="ps-negotiate">
+          <div class="step-num">02</div>
+          <div class="step-name">NEGOTIATE</div>
+          <div class="step-status" id="ps-negotiate-s">Waiting</div>
+        </div>
+        <div class="pipeline-arrow" id="pa-2">→</div>
+        <div class="pipeline-step" id="ps-transfer">
+          <div class="step-num">03</div>
+          <div class="step-name">TRANSFER</div>
+          <div class="step-status" id="ps-transfer-s">Waiting</div>
+        </div>
+      </div>
+    </div>
+
+    <div id="cycle-result-card" class="card" style="display:none">
+      <div class="card-title">Received Data</div>
+      <div id="cycle-result-box" class="result-box" style="margin-top:0; max-height:400px;"></div>
+    </div>
+  </div>
+
+</main>
+
+<script>
+// State
+const state = {
+  vcList: [],
+  assetList: [],
+};
+
+// Utilities
+function jsonHL(obj) {
+  const str = JSON.stringify(obj, null, 2);
+  return str
+    .replace(/\"([^\"]+)\":/g, '<span class="json-key">"$1"</span>:')
+    .replace(/: \"([^\"]*)\"/g, ': <span class="json-str">"$1"</span>')
+    .replace(/: ([0-9.]+)/g, ': <span class="json-num">$1</span>')
+    .replace(/: (true|false)/g, ': <span class="json-bool">$1</span>')
+    .replace(/: null/g, ': <span class="json-null">null</span>');
+}
+
+function showResult(el, html, isError = false) {
+  el.innerHTML = html;
+  el.classList.remove('hidden');
+  if (isError) el.style.borderColor = 'var(--red)';
+  else el.style.borderColor = '';
+}
+
+function setStep(id, stepState, msg) {
+  const el = document.getElementById('ps-' + id);
+  const sm = document.getElementById('ps-' + id + '-s');
+  el.className = 'pipeline-step ' + stepState;
+  sm.textContent = msg;
+}
+
+function setArrow(id, lit) {
+  document.getElementById('pa-' + id).className = 'pipeline-arrow' + (lit ? ' lit' : '');
+}
+
+// Server status
+async function checkServer() {
+  try {
+    const r = await fetch('/catalog', {
+      headers: { Authorization: 'Bearer dummy' }
+    });
+    document.getElementById('server-status').textContent = 'ONLINE';
+    const name = await fetch('/participant').then(r => r.json()).catch(() => ({ name: '-' }));
+    document.getElementById('participant-label').textContent = name.name || '-';
+  } catch {
+    document.getElementById('server-status').textContent = 'OFFLINE';
+    document.getElementById('server-status').style.color = 'var(--red)';
+  }
+}
+
+// Page navigation
+function showPage(name) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-btn').forEach(a => a.classList.remove('active'));
+  document.getElementById('page-' + name).classList.add('active');
+  document.querySelector(`[data-page="${name}"]`).classList.add('active');
+  refreshVCSelects();
+}
+
+// VC operations
+async function issueVC() {
+  const pid     = document.getElementById('vc-pid').value.trim();
+  const country = document.getElementById('vc-country').value.trim();
+  const mid     = document.getElementById('vc-mid').value.trim();
+  const result  = document.getElementById('vc-result');
+
+  if (!pid || !country || !mid) {
+    showResult(result, '<span class="err">Please fill in all fields</span>', true);
+    return;
+  }
+
+  result.innerHTML = '<span class="spinner"></span> Issuing...';
+  result.classList.remove('hidden');
+
+  try {
+    const res = await fetch('/issue-vc', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ participant_id: pid, country, membership_id: mid })
+    });
+    const data = await res.json();
+
+    state.vcList.push({ label: mid + ' (' + country + ')', jwt: data.vc_jwt, country, pid });
+    renderVCList();
+    refreshVCSelects();
+
+    showResult(result,
+      `<span class="ok">Issued successfully</span>\n\n` +
+      `<span class="key">participant:</span> <span class="val">${pid}</span>\n` +
+      `<span class="key">country:</span>     <span class="val">${country}</span>\n\n` +
+      `<span class="key">JWT:</span>\n${data.vc_jwt}`
+    );
+  } catch (e) {
+    showResult(result, `<span class="err">Error: ${e.message}</span>`, true);
+  }
+}
+
+function renderVCList() {
+  const el = document.getElementById('vc-list');
+  if (!state.vcList.length) {
+    el.innerHTML = '<div class="empty-state">No VCs issued yet</div>';
+    return;
+  }
+  el.innerHTML = state.vcList.map((v, i) => `
+    <div class="vc-item">
+      <span>${v.label}</span>
+      <span class="jwt-preview">${v.jwt.substring(0,40)}...</span>
+    </div>
+  `).join('');
+}
+
+function refreshVCSelects() {
+  ['cat-vc-select', 'cycle-vc-select'].forEach(id => {
+    const sel = document.getElementById(id);
+    const cur = sel.value;
+    sel.innerHTML = '<option value="">- Select VC -</option>' +
+      state.vcList.map((v, i) =>
+        `<option value="${i}">${v.label}</option>`
+      ).join('');
+    sel.value = cur;
+  });
+}
+
+// Asset operations
+async function registerAsset() {
+  const name    = document.getElementById('asset-name').value.trim();
+  const url     = document.getElementById('asset-url').value.trim();
+  const country = document.getElementById('asset-country').value.trim();
+  const result  = document.getElementById('asset-result');
+
+  if (!name || !url || !country) {
+    showResult(result, '<span class="err">Please fill in all fields</span>', true);
+    return;
+  }
+
+  result.innerHTML = '<span class="spinner"></span> Registering...';
+  result.classList.remove('hidden');
+
+  try {
+    const res = await fetch('/service-offerings', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, data_url: url, usage_policy: { country } })
+    });
+    const data = await res.json();
+
+    state.assetList.push({ ...data, name, data_url: url, country });
+    renderAssetList();
+
+    showResult(result,
+      `<span class="ok">Registered successfully</span>\n\n` +
+      `<span class="key">service_offering_id:</span> <span class="val">${data.service_offering_id}</span>\n` +
+      `<span class="key">usage_policy_id:</span>     <span class="val">${data.usage_policy_id}</span>\n` +
+      `<span class="key">usage_policy:</span>        country = ${country}`
+    );
+  } catch (e) {
+    showResult(result, `<span class="err">Error: ${e.message}</span>`, true);
+  }
+}
+
+function renderAssetList() {
+  const el = document.getElementById('asset-list');
+  if (!state.assetList.length) {
+    el.innerHTML = '<div class="empty-state">No service offerings registered yet</div>';
+    return;
+  }
+  el.innerHTML = `
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Usage Policy</th>
+          <th>Service Offering ID</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${state.assetList.map(a => `
+          <tr>
+            <td>${a.name}</td>
+            <td><span class="badge badge-blue">country: ${a.country}</span></td>
+            <td style="color:var(--muted)">${a.service_offering_id.substring(0,8)}...</td>
+          </tr>
+        `).join('')}
+      </tbody>
+    </table>
+  `;
+}
+
+// Catalog query
+async function queryCatalog() {
+  const target = document.getElementById('cat-target').value.trim();
+  const vcIdx  = document.getElementById('cat-vc-select').value;
+  const area   = document.getElementById('catalog-result-area');
+
+  if (!vcIdx && vcIdx !== 0) {
+    area.innerHTML = '<div class="card"><span style="color:var(--red);font-family:var(--mono);font-size:14px">Please issue and select a VC first</span></div>';
+    return;
+  }
+
+  const vc = state.vcList[parseInt(vcIdx)];
+  area.innerHTML = '<div class="card"><span class="spinner"></span><span style="font-family:var(--mono);font-size:14px"> Querying...</span></div>';
+
+  try {
+    const res = await fetch(`${target}/catalog`, {
+      headers: { Authorization: `Bearer ${vc.jwt}` }
+    });
+    const data = await res.json();
+
+    if (data.detail) {
+      area.innerHTML = `<div class="card"><span style="color:var(--red);font-family:var(--mono);font-size:14px">${data.detail}</span></div>`;
+      return;
+    }
+
+    const offerings = data.service_offerings || [];
+    area.innerHTML = `
+      <div class="card">
+        <div class="card-title">Results - ${data.participant}</div>
+        ${offerings.length === 0
+          ? '<div class="empty-state">No service offerings match the usage policy conditions</div>'
+          : offerings.map(o => `
+              <div class="offer-card">
+                <div>
+                  <div class="offer-name">${o.name}</div>
+                  <div class="offer-id">service_offering_id: ${o.service_offering_id.substring(0,16)}...</div>
+                </div>
+                <div style="display:flex;gap:12px;align-items:center">
+                  <span class="policy-tag">country: ${o.usage_policy.country}</span>
+                  <span class="badge badge-green">ACCESSIBLE</span>
+                </div>
+              </div>
+            `).join('')
+        }
+        <div style="margin-top:16px;font-family:var(--mono);font-size:13px;color:var(--muted)">
+          ${offerings.length} service offering(s) found | VC country: ${vc.country}
+        </div>
+      </div>
+    `;
+  } catch (e) {
+    area.innerHTML = `<div class="card"><span style="color:var(--red);font-family:var(--mono);font-size:14px">Connection error: ${e.message}</span></div>`;
+  }
+}
+
+// Full cycle
+async function runCycle() {
+  const target = document.getElementById('cycle-target').value.trim();
+  const vcIdx  = document.getElementById('cycle-vc-select').value;
+  const myId   = document.getElementById('cycle-myid').value.trim();
+
+  if (!vcIdx && vcIdx !== 0) {
+    alert('Please issue and select a VC first');
+    return;
+  }
+
+  const vc = state.vcList[parseInt(vcIdx)];
+  const btn = document.getElementById('cycle-btn');
+  btn.disabled = true;
+
+  // Reset
+  ['catalog','negotiate','transfer'].forEach(s => setStep(s, '', 'Waiting'));
+  setArrow('1', false); setArrow('2', false);
+  document.getElementById('cycle-result-card').style.display = 'none';
+
+  // 1) Catalog
+  setStep('catalog', 'active', 'Querying...');
+  let offerings, catalogData;
+  try {
+    const headers = { Authorization: `Bearer ${vc.jwt}` };
+    const r = await fetch(`${target}/catalog`, { headers });
+    catalogData = await r.json();
+    offerings = catalogData.service_offerings || [];
+
+    if (!offerings.length) {
+      setStep('catalog', 'error', 'No service offerings');
+      btn.disabled = false;
+      return;
+    }
+    setStep('catalog', 'done', `${offerings.length} offering(s)`);
+    setArrow('1', true);
+  } catch (e) {
+    setStep('catalog', 'error', 'Connection error');
+    btn.disabled = false;
+    return;
+  }
+
+  // 2) Negotiate
+  await sleep(400);
+  setStep('negotiate', 'active', 'Negotiating...');
+  let contractId;
+  try {
+    const headers = {
+      Authorization: `Bearer ${vc.jwt}`,
+      'Content-Type': 'application/json'
+    };
+    const r = await fetch(`${target}/negotiate`, {
+      method: 'POST', headers,
+      body: JSON.stringify({ service_offering_id: offerings[0].service_offering_id, consumer_id: myId })
+    });
+    const neg = await r.json();
+    contractId = neg.contract_id;
+    setStep('negotiate', 'done', 'Contract issued');
+    setArrow('2', true);
+  } catch (e) {
+    setStep('negotiate', 'error', 'Negotiation failed');
+    btn.disabled = false;
+    return;
+  }
+
+  // 3) Transfer
+  await sleep(400);
+  setStep('transfer', 'active', 'Receiving data...');
+  try {
+    const r = await fetch(`${target}/transfer`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ contract_id: contractId, consumer_id: myId })
+    });
+    const result = await r.json();
+    setStep('transfer', 'done', 'Transfer complete');
+
+    const card = document.getElementById('cycle-result-card');
+    const box  = document.getElementById('cycle-result-box');
+    box.innerHTML = jsonHL(result);
+    card.style.display = 'block';
+  } catch (e) {
+    setStep('transfer', 'error', 'Transfer failed');
+  }
+
+  btn.disabled = false;
+}
+
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+// Init
+checkServer();
+</script>
+</body>
+</html>
