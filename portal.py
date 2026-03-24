@@ -1,11 +1,11 @@
 """
-DSP (Dataspace Participant) - MVP
-하나의 앱을 포트만 다르게 두 번 띄우면 DSP-A <-> DSP-B 가 됩니다.
+Portal (Dataspace Participant) - MVP
+하나의 앱을 포트만 다르게 두 번 띄우면 Portal-A <-> Portal-B 가 됩니다.
 
 실행:
   pip install fastapi uvicorn pyjwt cryptography httpx
-  python dsp.py --port 8001 --name "company-A"
-  python dsp.py --port 8002 --name "company-B"
+  python Portal.py --port 8001 --name "company-A"
+  python Portal.py --port 8002 --name "company-B"
 """
 
 import argparse
@@ -30,7 +30,7 @@ with open("keys/issuer_public.pem") as f:
 PARTICIPANT_PORT = 8001   # uvicorn 실행 포트와 동일하게 맞춰야 함
 
 def self_url() -> str:
-    """이 DSP 자신의 base URL을 반환합니다."""
+    """이 Portal 자신의 base URL을 반환합니다."""
     return f"http://localhost:{PARTICIPANT_PORT}"
 
 def self_did() -> str:
@@ -220,7 +220,7 @@ def verify_vc(vc_jwt: str) -> dict:
 # ── Service Offering 등록 ─────────────────────────────────────────────────────
 class ServiceOfferingRequest(BaseModel):
     name: str
-    data_url: str         # 실제 데이터 위치 (다른 DSP에는 숨김)
+    data_url: str         # 실제 데이터 위치 (다른 Portal에는 숨김)
     usage_policy: dict    # e.g. {"country": "DE"}
 
 @app.post("/service-offerings")
@@ -310,9 +310,9 @@ def transfer(req: TransferRequest):
         "message": f"'{service_offering['name']}' Data transfer completed.",
     }
 
-# ── Consumer 역할: 상대 DSP에서 데이터 가져오기 ───────────────────────────────
+# ── Consumer 역할: 상대 Portal에서 데이터 가져오기 ───────────────────────────────
 class FetchRequest(BaseModel):
-    target_url: str    # 상대 DSP 주소, e.g. "http://localhost:8001"
+    target_url: str    # 상대 Portal 주소, e.g. "http://localhost:8001"
     my_vc_jwt: str     # 내 VC (issue-vc로 미리 발급받은 것)
     my_id: str         # e.g. "did:web:company-B"
 
@@ -347,7 +347,7 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
     parser.add_argument("--port", type=int, default=8001)
-    parser.add_argument("--name", type=str, default="dsp-participant")
+    parser.add_argument("--name", type=str, default="Portal-participant")
     args = parser.parse_args()
 
     PARTICIPANT_ID   = args.name

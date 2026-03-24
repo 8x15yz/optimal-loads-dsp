@@ -1,12 +1,12 @@
 """
 demo.py - 한 사이클 자동 시연
-터미널 두 개에서 dsp.py 를 각각 띄운 뒤 이 스크립트를 실행하세요.
+터미널 두 개에서 Portal.py 를 각각 띄운 뒤 이 스크립트를 실행하세요.
 
   # 터미널 1
-  python dsp.py --port 8001 --name "company-A"
+  python Portal.py --port 8001 --name "company-A"
 
   # 터미널 2
-  python dsp.py --port 8002 --name "company-B"
+  python Portal.py --port 8002 --name "company-B"
 
   # 터미널 3
   python demo.py
